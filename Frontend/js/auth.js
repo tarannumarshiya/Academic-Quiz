@@ -1,132 +1,133 @@
+// auth.js — JWT-based AuthService
+// Talks to the Express backend at /api/auth/*.
+
+import { apiFetch, Token } from './api.js';
+
 class AuthService {
   constructor() {
-    this._authStateCallbacks = [];
-    this._currentUser = null;
+    this._user          = Token.loadUser();   // synchronous cache from localStorage
+    this._authCallbacks = [];
+    this._initPromise   = null;
   }
 
   init() {
-    // Restore session from localStorage on init
-    const saved = localStorage.getItem('bq_current_user');
-    if (saved) {
-      try {
-        this._currentUser = JSON.parse(saved);
-      } catch {
-        this._currentUser = null;
-      }
+    // Kick off session restore the first time init() is called
+    if (!this._initPromise) {
+      this._initPromise = this._restoreSession();
     }
   }
 
-  // Register a new user
-  async register(email, password, username) {
-    const users = this._getAllUsers();
-
-    const existing = Object.values(users).find(u => u.email === email);
-    if (existing) throw new Error("This email is already registered. Try logging in instead.");
-
-    if (!email.includes('@')) throw new Error("Please enter a valid email address.");
-    if (password.length < 6) throw new Error("Your password should be at least 6 characters long.");
-
-    const uid = 'user_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
-
-    const userRecord = {
-      uid,
-      username,
-      email,
-      password, // stored locally; no sensitive backend involved
-      displayName: username,
-      createdAt: Date.now(),
-      totalQuizzesTaken: 0,
-      totalScore: 0
-    };
-
-    users[uid] = userRecord;
-    localStorage.setItem('bq_users', JSON.stringify(users));
-
-    const sessionUser = this._toSessionUser(userRecord);
-    this._setCurrentUser(sessionUser);
-    return sessionUser;
-  }
-
-  // Login existing user
-  async login(email, password) {
-    const users = this._getAllUsers();
-    const userRecord = Object.values(users).find(u => u.email === email);
-
-    if (!userRecord || userRecord.password !== password) {
-      throw new Error("Invalid email or password. Please try again.");
+  // ── Restore session on page load ──────────────────────────────────────────────
+  async _restoreSession() {
+    if (!Token.getAccess() && !Token.getRefresh()) {
+      this._notify(null);
+      return null;
     }
-
-    const sessionUser = this._toSessionUser(userRecord);
-    this._setCurrentUser(sessionUser);
-    return sessionUser;
-  }
-
-  // Login with Google — not supported without Firebase; surface a clear message
-  async loginWithGoogle() {
-    throw new Error("Google Sign-In requires Firebase. Please use email & password to log in.");
-  }
-
-  // Logout user
-  async logout() {
-    this._currentUser = null;
-    localStorage.removeItem('bq_current_user');
-    this._notifyAuthStateChange(null);
-  }
-
-  // Set up auth state change observer
-  onAuthStateChanged(callback) {
-    this._authStateCallbacks.push(callback);
-    // Fire immediately with current state
-    setTimeout(() => callback(this._currentUser), 0);
-    // Return unsubscribe function
-    return () => {
-      this._authStateCallbacks = this._authStateCallbacks.filter(cb => cb !== callback);
-    };
-  }
-
-  // Helper to fetch user profile from localStorage
-  async getUserProfile(uid) {
-    const users = this._getAllUsers();
-    return users[uid] || null;
-  }
-
-  // Update profile stats (totalScore, totalQuizzesTaken)
-  async updateUserProfile(uid, updates) {
-    const users = this._getAllUsers();
-    if (!users[uid]) return;
-    users[uid] = { ...users[uid], ...updates };
-    localStorage.setItem('bq_users', JSON.stringify(users));
-  }
-
-  // -------------------------------------------------------
-  // Private helpers
-  // -------------------------------------------------------
-
-  _getAllUsers() {
     try {
-      return JSON.parse(localStorage.getItem('bq_users') || '{}');
+      const user = await apiFetch('/auth/me');
+      this._notify(this._toUser(user));
+      return user;
     } catch {
-      return {};
+      this._notify(null);
+      return null;
     }
   }
 
-  _toSessionUser(userRecord) {
-    return {
-      uid: userRecord.uid,
-      displayName: userRecord.username || userRecord.displayName,
-      email: userRecord.email
+  // ── Register ──────────────────────────────────────────────────────────────────
+  async register(email, password, username) {
+    const data = await apiFetch('/auth/register', {
+      method: 'POST',
+      body: JSON.stringify({ username, email, password }),
+    });
+    Token.setTokens(data.accessToken, data.refreshToken);
+    const user = this._toUser(data);
+    this._notify(user);
+    return user;
+  }
+
+  // ── Login ─────────────────────────────────────────────────────────────────────
+  async login(email, password) {
+    const data = await apiFetch('/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ email, password }),
+    });
+    Token.setTokens(data.accessToken, data.refreshToken);
+    const user = this._toUser(data);
+    this._notify(user);
+    return user;
+  }
+
+  // ── Google login (not supported without Firebase) ─────────────────────────────
+  async loginWithGoogle() {
+    throw new Error('Google Sign-In is not available. Please use email and password.');
+  }
+
+  // ── Logout ────────────────────────────────────────────────────────────────────
+  async logout() {
+    try { await apiFetch('/auth/logout', { method: 'POST' }); } catch { /* best-effort */ }
+    this._notify(null);
+  }
+
+  // ── Auth-state observer (mirrors Firebase onAuthStateChanged API) ──────────────
+  onAuthStateChanged(callback) {
+    this._authCallbacks.push(callback);
+
+    // Bootstrap session once
+    if (!this._initPromise) {
+      this._initPromise = this._restoreSession();
+    }
+
+    // Fire immediately with any cached user
+    if (this._user !== undefined) {
+      setTimeout(() => callback(this._user), 0);
+    }
+
+    return () => {
+      this._authCallbacks = this._authCallbacks.filter(cb => cb !== callback);
     };
   }
 
-  _setCurrentUser(user) {
-    this._currentUser = user;
-    localStorage.setItem('bq_current_user', JSON.stringify(user));
-    this._notifyAuthStateChange(user);
+  // ── Fetch fresh profile from backend ─────────────────────────────────────────
+  async getUserProfile() {
+    try {
+      const data = await apiFetch('/auth/me');
+      const user = this._toUser(data);
+      this._notify(user);
+      return data;   // raw server response (has totalScore, totalQuizzesTaken, etc.)
+    } catch {
+      return null;
+    }
   }
 
-  _notifyAuthStateChange(user) {
-    this._authStateCallbacks.forEach(cb => cb(user));
+  // ── Update profile stats — handled server-side on score save; no-op here ─────
+  async updateUserProfile() {}
+
+  getCurrentUser() {
+    return this._user || null;
+  }
+
+  // ── Internal: broadcast state to all listeners ────────────────────────────────
+  _notify(user) {
+    this._user = user;
+    if (user) Token.saveUser(user); else Token.clearAll();
+    this._authCallbacks.forEach(cb => cb(user));
+  }
+
+  // ── Shape the API response into the session user object the SPA expects ───────
+  _toUser(data) {
+    return {
+      uid:               data._id,
+      _id:               data._id,
+      displayName:       data.username,
+      username:          data.username,
+      email:             data.email,
+      totalQuizzesTaken: data.totalQuizzesTaken ?? 0,
+      totalScore:        data.totalScore        ?? 0,
+    };
   }
 }
+
+// Force sign-out when refresh token expires (fired by apiFetch)
+window.addEventListener('auth:signedOut', () => authService._notify(null));
 
 export const authService = new AuthService();
