@@ -1,46 +1,46 @@
-import mongoose from 'mongoose';
+const mongoose = require('mongoose');
 
 const quizSchema = new mongoose.Schema(
   {
-    code: {
-      type: String,
-      unique: true,
-      uppercase: true,
-      index: true,
-    },
     title: {
       type: String,
-      required: [true, 'Quiz title is required'],
+      required: [true, 'Please provide a quiz title'],
       trim: true,
-      maxlength: [100, 'Title cannot exceed 100 characters'],
     },
     description: {
       type: String,
-      default: '',
-      maxlength: [500, 'Description cannot exceed 500 characters'],
+      trim: true,
     },
     genre: {
       type: String,
-      enum: ['Coding', 'General', 'Science', 'History', 'Pop Culture', 'Other'],
-      default: 'General',
+      required: [true, 'Please specify a quiz genre'],
+      trim: true,
     },
-    timeLimit:   { type: Number, default: 30 },
-    creator:     { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
-    creatorName: { type: String, required: true },
-    isActive:    { type: Boolean, default: true },
+    timeLimit: {
+      type: Number,
+      default: 30, // time in seconds per question
+    },
+    code: {
+      type: String,
+      required: true,
+      unique: true,
+      trim: true,
+    },
+    creator: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      required: true,
+    },
+    questions: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Question',
+      },
+    ],
   },
-  { timestamps: true }
+  {
+    timestamps: true,
+  }
 );
 
-// Auto-generate unique 6-char code: QZ + 4 alphanumeric chars
-quizSchema.pre('validate', function (next) {
-  if (!this.code) {
-    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-    this.code =
-      'QZ' +
-      Array.from({ length: 4 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
-  }
-  next();
-});
-
-export default mongoose.model('Quiz', quizSchema);
+module.exports = mongoose.model('Quiz', quizSchema);
