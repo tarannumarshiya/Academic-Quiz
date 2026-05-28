@@ -1,3 +1,5 @@
+const API_URL = 'http://localhost:5000/api';
+
 class AuthService {
   constructor() {
     this._authStateCallbacks = [];
@@ -16,49 +18,68 @@ class AuthService {
     }
   }
 
-  // Register a new user
+  // Register a new user with the backend
   async register(email, password, username) {
-    const users = this._getAllUsers();
+    try {
+      const res = await fetch(`${API_URL}/auth/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password, username }),
+      });
 
-    const existing = Object.values(users).find(u => u.email === email);
-    if (existing) throw new Error("This email is already registered. Try logging in instead.");
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.message || 'Registration failed');
+      }
 
-    if (!email.includes('@')) throw new Error("Please enter a valid email address.");
-    if (password.length < 6) throw new Error("Your password should be at least 6 characters long.");
+      localStorage.setItem('bq_token', data.token);
 
-    const uid = 'user_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
+      const sessionUser = {
+        uid: data.user.id,
+        displayName: data.user.username,
+        email: data.user.email,
+        totalQuizzesTaken: data.user.totalQuizzesTaken,
+        totalScore: data.user.totalScore,
+      };
 
-    const userRecord = {
-      uid,
-      username,
-      email,
-      password, // stored locally; no sensitive backend involved
-      displayName: username,
-      createdAt: Date.now(),
-      totalQuizzesTaken: 0,
-      totalScore: 0
-    };
-
-    users[uid] = userRecord;
-    localStorage.setItem('bq_users', JSON.stringify(users));
-
-    const sessionUser = this._toSessionUser(userRecord);
-    this._setCurrentUser(sessionUser);
-    return sessionUser;
+      this._setCurrentUser(sessionUser);
+      return sessionUser;
+    } catch (err) {
+      console.error(err);
+      throw err;
+    }
   }
 
-  // Login existing user
+  // Login existing user with the backend
   async login(email, password) {
-    const users = this._getAllUsers();
-    const userRecord = Object.values(users).find(u => u.email === email);
+    try {
+      const res = await fetch(`${API_URL}/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
 
-    if (!userRecord || userRecord.password !== password) {
-      throw new Error("Invalid email or password. Please try again.");
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.message || 'Login failed');
+      }
+
+      localStorage.setItem('bq_token', data.token);
+
+      const sessionUser = {
+        uid: data.user.id,
+        displayName: data.user.username,
+        email: data.user.email,
+        totalQuizzesTaken: data.user.totalQuizzesTaken,
+        totalScore: data.user.totalScore,
+      };
+
+      this._setCurrentUser(sessionUser);
+      return sessionUser;
+    } catch (err) {
+      console.error(err);
+      throw err;
     }
-
-    const sessionUser = this._toSessionUser(userRecord);
-    this._setCurrentUser(sessionUser);
-    return sessionUser;
   }
 
   // Login with Google — not supported without Firebase; surface a clear message
@@ -66,10 +87,11 @@ class AuthService {
     throw new Error("Google Sign-In requires Firebase. Please use email & password to log in.");
   }
 
-  // Logout user
+  // Logout user and clear tokens
   async logout() {
     this._currentUser = null;
     localStorage.removeItem('bq_current_user');
+    localStorage.removeItem('bq_token');
     this._notifyAuthStateChange(null);
   }
 
@@ -84,39 +106,40 @@ class AuthService {
     };
   }
 
-  // Helper to fetch user profile from localStorage
+  // Helper to fetch user profile from the database
   async getUserProfile(uid) {
-    const users = this._getAllUsers();
-    return users[uid] || null;
+    try {
+      const token = localStorage.getItem('bq_token');
+      const res = await fetch(`${API_URL}/auth/profile`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+      if (!res.ok) {
+        throw new Error('Failed to fetch profile');
+      }
+      const profile = await res.json();
+      return {
+        uid: profile.id,
+        username: profile.username,
+        email: profile.email,
+        totalQuizzesTaken: profile.totalQuizzesTaken,
+        totalScore: profile.totalScore,
+      };
+    } catch (err) {
+      console.error(err);
+      return this._currentUser; // fallback to session
+    }
   }
 
-  // Update profile stats (totalScore, totalQuizzesTaken)
+  // Update profile stats (deprecated in favor of server score uploads)
   async updateUserProfile(uid, updates) {
-    const users = this._getAllUsers();
-    if (!users[uid]) return;
-    users[uid] = { ...users[uid], ...updates };
-    localStorage.setItem('bq_users', JSON.stringify(users));
+    // Profile details are updated natively via /api/scores score submissions
   }
 
   // -------------------------------------------------------
   // Private helpers
   // -------------------------------------------------------
-
-  _getAllUsers() {
-    try {
-      return JSON.parse(localStorage.getItem('bq_users') || '{}');
-    } catch {
-      return {};
-    }
-  }
-
-  _toSessionUser(userRecord) {
-    return {
-      uid: userRecord.uid,
-      displayName: userRecord.username || userRecord.displayName,
-      email: userRecord.email
-    };
-  }
 
   _setCurrentUser(user) {
     this._currentUser = user;
