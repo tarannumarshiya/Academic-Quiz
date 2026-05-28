@@ -1,113 +1,120 @@
-import jwt from 'jsonwebtoken';
-import { validationResult } from 'express-validator';
-import User from '../models/User.js';
-import { generateAccessToken, generateRefreshToken } from '../utils/generateToken.js';
+const User = require('../models/User');
+const generateToken = require('../utils/generateToken');
 
-// ─── @POST /api/auth/register ─────────────────────────────────────────────────
-export const register = async (req, res) => {
-  const errors = validationResult(req);
-  if (!errors.isEmpty())
-    return res.status(400).json({ errors: errors.array() });
-
+// @desc    Register a new user
+// @route   POST /api/auth/register
+// @access  Public
+const registerUser = async (req, res, next) => {
   const { username, email, password } = req.body;
 
   try {
-    const existing = await User.findOne({ $or: [{ email }, { username }] });
-    if (existing) {
-      const field = existing.email === email ? 'email' : 'username';
-      return res.status(400).json({ message: `This ${field} is already taken` });
+    if (!username || !email || !password) {
+      res.status(400);
+      throw new Error('Please enter all fields');
     }
 
-    const user = await User.create({ username, email, password });
+    // Check if user exists by email
+    const emailExists = await User.findOne({ email });
+    if (emailExists) {
+      res.status(400);
+      throw new Error('Email is already registered. Try logging in instead.');
+    }
 
-    const accessToken  = generateAccessToken(user._id);
-    const refreshToken = generateRefreshToken(user._id);
-    user.refreshToken  = refreshToken;
-    await user.save({ validateBeforeSave: false });
+    // Check if user exists by username
+    const usernameExists = await User.findOne({ username });
+    if (usernameExists) {
+      res.status(400);
+      throw new Error('Username is already taken');
+    }
 
-    res.status(201).json({
-      _id:               user._id,
-      username:          user.username,
-      email:             user.email,
-      totalQuizzesTaken: user.totalQuizzesTaken,
-      totalScore:        user.totalScore,
-      accessToken,
-      refreshToken,
+    // Create user
+    const user = await User.create({
+      username,
+      email,
+      password,
     });
+
+    if (user) {
+      res.status(201).json({
+        token: generateToken(user._id),
+        user: {
+          id: user._id,
+          username: user.username,
+          email: user.email,
+          totalQuizzesTaken: user.totalQuizzesTaken,
+          totalScore: user.totalScore,
+        },
+      });
+    } else {
+      res.status(400);
+      throw new Error('Invalid user data');
+    }
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    next(error);
   }
 };
 
-// ─── @POST /api/auth/login ────────────────────────────────────────────────────
-export const login = async (req, res) => {
-  const errors = validationResult(req);
-  if (!errors.isEmpty())
-    return res.status(400).json({ errors: errors.array() });
-
+// @desc    Authenticate user & get token
+// @route   POST /api/auth/login
+// @access  Public
+const loginUser = async (req, res, next) => {
   const { email, password } = req.body;
 
   try {
-    const user = await User.findOne({ email }).select('+password +refreshToken');
-    if (!user || !(await user.matchPassword(password))) {
-      return res.status(401).json({ message: 'Invalid email or password' });
+    if (!email || !password) {
+      res.status(400);
+      throw new Error('Please fill in all fields');
     }
 
-    const accessToken  = generateAccessToken(user._id);
-    const refreshToken = generateRefreshToken(user._id);
-    user.refreshToken  = refreshToken;
-    await user.save({ validateBeforeSave: false });
+    const user = await User.findOne({ email });
 
-    res.json({
-      _id:               user._id,
-      username:          user.username,
-      email:             user.email,
-      totalQuizzesTaken: user.totalQuizzesTaken,
-      totalScore:        user.totalScore,
-      accessToken,
-      refreshToken,
-    });
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-};
-
-// ─── @POST /api/auth/refresh ──────────────────────────────────────────────────
-export const refresh = async (req, res) => {
-  const { refreshToken } = req.body;
-  if (!refreshToken)
-    return res.status(401).json({ message: 'Refresh token required' });
-
-  try {
-    const decoded = jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET);
-    const user    = await User.findById(decoded.id).select('+refreshToken');
-
-    if (!user || user.refreshToken !== refreshToken) {
-      return res.status(403).json({ message: 'Invalid refresh token – please log in again' });
+    if (user && (await user.comparePassword(password))) {
+      res.json({
+        token: generateToken(user._id),
+        user: {
+          id: user._id,
+          username: user.username,
+          email: user.email,
+          totalQuizzesTaken: user.totalQuizzesTaken,
+          totalScore: user.totalScore,
+        },
+      });
+    } else {
+      res.status(401);
+      throw new Error('Invalid email or password. Please try again.');
     }
-
-    const newAccessToken  = generateAccessToken(user._id);
-    const newRefreshToken = generateRefreshToken(user._id);
-    user.refreshToken     = newRefreshToken;
-    await user.save({ validateBeforeSave: false });
-
-    res.json({ accessToken: newAccessToken, refreshToken: newRefreshToken });
-  } catch {
-    res.status(403).json({ message: 'Invalid or expired refresh token' });
-  }
-};
-
-// ─── @POST /api/auth/logout  (protected) ─────────────────────────────────────
-export const logout = async (req, res) => {
-  try {
-    await User.findByIdAndUpdate(req.user._id, { refreshToken: null });
-    res.json({ message: 'Logged out successfully' });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    next(error);
   }
 };
 
-// ─── @GET /api/auth/me  (protected) ──────────────────────────────────────────
-export const getMe = async (req, res) => {
-  res.json(req.user);
+// @desc    Get user profile stats
+// @route   GET /api/auth/profile
+// @access  Private
+const getUserProfile = async (req, res, next) => {
+  try {
+    const user = await User.findById(req.user._id);
+
+    if (user) {
+      res.json({
+        id: user._id,
+        username: user.username,
+        email: user.email,
+        totalQuizzesTaken: user.totalQuizzesTaken,
+        totalScore: user.totalScore,
+      });
+    } else {
+      res.status(404);
+      throw new Error('User not found');
+    }
+  } catch (error) {
+    next(error);
+  }
 };
+
+module.exports = {
+  registerUser,
+  loginUser,
+  getUserProfile,
+};
+zuz-oqco-jtq
