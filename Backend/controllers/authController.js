@@ -50,6 +50,7 @@ const registerUser = async (req, res, next) => {
       throw new Error('Invalid user data');
     }
   } catch (error) {
+    console.error('Error in registerUser:', error);
     next(error);
   }
 };
@@ -84,6 +85,7 @@ const loginUser = async (req, res, next) => {
       throw new Error('Invalid email or password. Please try again.');
     }
   } catch (error) {
+    console.error('Error in loginUser:', error);
     next(error);
   }
 };
@@ -108,6 +110,7 @@ const getUserProfile = async (req, res, next) => {
       throw new Error('User not found');
     }
   } catch (error) {
+    console.error('Error in getUserProfile:', error);
     next(error);
   }
 };
@@ -117,4 +120,3 @@ module.exports = {
   loginUser,
   getUserProfile,
 };
-zuz-oqco-jtq

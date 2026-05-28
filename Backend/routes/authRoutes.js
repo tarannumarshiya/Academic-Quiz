@@ -12,7 +12,3 @@ router.post('/login', loginUser);
 router.get('/profile', protect, getUserProfile);
 
 module.exports = router;
-<<<<<<< HEAD
-=======
- 
->>>>>>> 61e8fe76ff18f53ea743a7462a49ea8289399dd3
