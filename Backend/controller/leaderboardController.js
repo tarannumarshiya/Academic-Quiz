@@ -1,102 +1,119 @@
-import Score from '../models/Score.js';
-import Quiz from '../models/Quiz.js';
-import Question from '../models/Question.js';
-import User from '../models/User.js';
+const Score = require('../models/Score');
+const User = require('../models/User');
+const Quiz = require('../models/Quiz');
 
-// ─── @POST /api/leaderboard/scores  (protected) ───────────────────────────────
-// Score is always calculated server-side from stored questions — never trust the client.
-export const saveScore = async (req, res) => {
+// @desc    Submit score attempt
+// @route   POST /api/scores
+// @access  Private
+const submitScore = async (req, res, next) => {
+  const { quizId, quizTitle, genre, score, totalQuestions } = req.body;
+
   try {
-    const { quizId, selections, timeTaken } = req.body;
-
-    const quiz = await Quiz.findById(quizId);
-    if (!quiz) return res.status(404).json({ message: 'Quiz not found' });
-
-    const questions = await Question.find({ quiz: quiz._id }).sort({ order: 1 });
-    if (questions.length === 0)
-      return res.status(400).json({ message: 'This quiz has no questions' });
-
-    let score = 0;
-    selections.forEach((sel, i) => {
-      if (questions[i] && sel === questions[i].correctOption) score++;
-    });
-
-    const percentage = Math.round((score / questions.length) * 100);
-
-    const savedScore = await Score.create({
-      quiz:           quiz._id,
-      quizTitle:      quiz.title,
-      quizCode:       quiz.code,
-      genre:          quiz.genre,
-      user:           req.user._id,
-      username:       req.user.username,
-      score,
-      totalQuestions: questions.length,
-      percentage,
-      selections,
-      timeTaken:      timeTaken || 0,
-    });
-
-    // Atomically increment user aggregate stats
-    await User.findByIdAndUpdate(req.user._id, {
-      $inc: { totalQuizzesTaken: 1, totalScore: score },
-    });
-
-    res.status(201).json(savedScore);
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-};
-
-// ─── @GET /api/leaderboard/my  (protected) ────────────────────────────────────
-export const getMyScores = async (req, res) => {
-  try {
-    const scores = await Score.find({ user: req.user._id })
-      .sort({ createdAt: -1 })
-      .limit(50);
-    res.json(scores);
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-};
-
-// ─── @GET /api/leaderboard/quiz/:quizCode  (protected) ────────────────────────
-// Returns best score per user for the given quiz, sorted by % then earliest time.
-export const getQuizLeaderboard = async (req, res) => {
-  try {
-    const scores = await Score.find({
-      quizCode: req.params.quizCode.toUpperCase(),
-    })
-      .sort({ percentage: -1, createdAt: 1 })
-      .limit(100)
-      .select('username score totalQuestions percentage timeTaken createdAt');
-
-    // Keep only each player's best attempt (array is already sorted best-first)
-    const seen = new Set();
-    const leaderboard = [];
-    for (const s of scores) {
-      if (!seen.has(s.username)) {
-        seen.add(s.username);
-        leaderboard.push(s);
-        if (leaderboard.length === 20) break;
-      }
+    if (score === undefined || !quizId || !quizTitle || !genre || !totalQuestions) {
+      res.status(400);
+      throw new Error('Please enter all score attempt details');
     }
 
-    res.json(leaderboard);
+    // Find quiz by room code (which is stored in quizId) or by mongoose _id
+    let quiz = await Quiz.findOne({ code: quizId.toUpperCase() });
+    if (!quiz && quizId.match(/^[0-9a-fA-F]{24}$/)) {
+      quiz = await Quiz.findById(quizId);
+    }
+
+    if (!quiz) {
+      res.status(404);
+      throw new Error('Quiz not found');
+    }
+
+    // Create Score record
+    const newScore = await Score.create({
+      user: req.user._id,
+      username: req.user.username,
+      quiz: quiz._id,
+      quizTitle,
+      genre,
+      score: Number(score),
+      totalQuestions: Number(totalQuestions),
+    });
+
+    // Update user cumulative stats (totalQuizzesTaken & totalScore)
+    // Here we accumulate the score (number of correct answers) or points.
+    // In app.js: syncUserDashboardStats fetches totalScore. Let's add the score to user.totalScore.
+    await User.findByIdAndUpdate(req.user._id, {
+      $inc: { totalQuizzesTaken: 1, totalScore: Number(score) },
+    });
+
+    res.status(201).json(newScore);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    next(error);
   }
 };
 
-// ─── @GET /api/leaderboard/global  (protected) ────────────────────────────────
-export const getGlobalLeaderboard = async (req, res) => {
+// @desc    Get global leaderboard (sorted by user totalScore descending)
+// @route   GET /api/leaderboard
+// @access  Public
+const getGlobalLeaderboard = async (req, res, next) => {
   try {
-    const users = await User.find({})
-      .sort({ totalScore: -1, totalQuizzesTaken: -1 })
-      .limit(20)
-      .select('username totalScore totalQuizzesTaken');
-    res.json(users);
+    const players = await User.find({})
+      .select('username totalScore totalQuizzesTaken')
+      .sort({ totalScore: -1 })
+      .limit(20);
+
+    res.json(players);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    next(error);
   }
 };
+
+// @desc    Get leaderboard for a specific quiz room (sorted by score descending)
+// @route   GET /api/leaderboard/:quizCode
+// @access  Public
+const getQuizLeaderboard = async (req, res, next) => {
+  const { quizCode } = req.params;
+
+  try {
+    // Find quiz first
+    let quiz = await Quiz.findOne({ code: quizCode.toUpperCase() });
+    if (!quiz && quizCode.match(/^[0-9a-fA-F]{24}$/)) {
+      quiz = await Quiz.findById(quizCode);
+    }
+
+    if (!quiz) {
+      res.status(404);
+      throw new Error('Quiz room not found');
+    }
+
+    const quizScores = await Score.find({ quiz: quiz._id })
+      .select('username score totalQuestions createdAt')
+      .sort({ score: -1, createdAt: 1 })
+      .limit(50);
+
+    res.json(quizScores);
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Get all score attempts for a specific user
+// @route   GET /api/scores/user/:userId
+// @access  Public
+const getUserAttempts = async (req, res, next) => {
+  const { userId } = req.params;
+
+  try {
+    const attempts = await Score.find({ user: userId })
+      .sort({ createdAt: -1 });
+
+    res.json(attempts);
+  } catch (error) {
+    next(error);
+  }
+};
+
+module.exports = {
+  submitScore,
+  getGlobalLeaderboard,
+  getQuizLeaderboard,
+  getUserAttempts,
+};
+zuz-oqco-jtq

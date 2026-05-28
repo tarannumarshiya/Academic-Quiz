@@ -1,35 +1,32 @@
-import mongoose from 'mongoose';
+const mongoose = require('mongoose');
 
 const questionSchema = new mongoose.Schema(
   {
-    quiz: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'Quiz',
-      required: true,
-      index: true,
-    },
     questionText: {
       type: String,
-      required: [true, 'Question text is required'],
+      required: [true, 'Please provide the question text'],
       trim: true,
     },
     options: {
       type: [String],
-      required: true,
+      required: [true, 'Please provide four options'],
       validate: {
-        validator: (v) => v.length === 4,
-        message: 'Each question must have exactly 4 options',
+        validator: function (val) {
+          return val.length === 4;
+        },
+        message: 'A question must have exactly 4 options',
       },
     },
     correctOption: {
       type: Number,
-      required: true,
-      min: 0,
-      max: 3,
+      required: [true, 'Please specify the correct option index (0-3)'],
+      min: [0, 'Correct option index must be at least 0 (Option A)'],
+      max: [3, 'Correct option index must be at most 3 (Option D)'],
     },
-    order: { type: Number, default: 0 },
   },
-  { timestamps: true }
+  {
+    timestamps: true,
+  }
 );
 
-export default mongoose.model('Question', questionSchema);
+module.exports = mongoose.model('Question', questionSchema);
