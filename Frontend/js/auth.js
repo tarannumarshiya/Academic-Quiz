@@ -1,4 +1,4 @@
-onst API_URL = 'http://localhost:5000/api';
+const API_URL = 'http://localhost:5000/api';
 
 class AuthService {
   constructor() {

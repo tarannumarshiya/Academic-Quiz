@@ -1,20 +1,16 @@
-import express from 'express';
-import {
-  saveScore,
-  getMyScores,
-  getQuizLeaderboard,
-  getGlobalLeaderboard,
-} from '../controllers/leaderboardController.js';
-import { protect } from '../middleware/authMiddleware.js';
-
+const express = require('express');
 const router = express.Router();
+const {
+  submitScore,
+  getGlobalLeaderboard,
+  getQuizLeaderboard,
+  getUserAttempts,
+} = require('../controllers/leaderboardController');
+const { protect } = require('../middleware/authMiddleware');
 
-// All leaderboard routes require a valid JWT
-router.use(protect);
+router.post('/scores', protect, submitScore);
+router.get('/scores/user/:userId', getUserAttempts);
+router.get('/leaderboard', getGlobalLeaderboard);
+router.get('/leaderboard/:quizCode', getQuizLeaderboard);
 
-router.post('/scores',        saveScore);
-router.get('/my',             getMyScores);
-router.get('/global',         getGlobalLeaderboard);
-router.get('/quiz/:quizCode', getQuizLeaderboard);
-
-export default router;
+module.exports = router;
