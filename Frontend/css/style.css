@@ -17,6 +17,7 @@ body {
   background: rgba(0, 242, 254, 0.95);
   color: #030712;
 }
+
 /* Custom Scrollbars */
 ::-webkit-scrollbar {
   width: 6px;
@@ -88,6 +89,14 @@ body {
 .cyber-border-purple:hover {
   border-color: rgba(161, 0, 255, 0.6);
   box-shadow: 0 0 20px rgba(161, 0, 255, 0.25);
+}
+
+.cyber-border-green {
+  border: 1px solid rgba(57, 255, 20, 0.2);
+}
+.cyber-border-green:hover {
+  border-color: rgba(57, 255, 20, 0.6);
+  box-shadow: 0 0 20px rgba(57, 255, 20, 0.25);
 }
 
 /* Glowing Neon Typography */
@@ -162,4 +171,16 @@ body {
   transform: translateY(-2px);
   background: rgba(255, 255, 255, 0.05);
   border-color: rgba(255, 255, 255, 0.12);
+}
+
+/* Custom scrollbar for specific areas */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 4px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(0, 242, 254, 0.2);
+  border-radius: 9999px;
 }
