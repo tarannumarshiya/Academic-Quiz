@@ -69,6 +69,21 @@ class DatabaseService {
     }
   }
 
+  // Fetch all quizzes (for lecturer dashboard statistics)
+  async getAllQuizzes() {
+    try {
+      const response = await fetch(`${API_URL}/quizzes`);
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || 'Failed to fetch quizzes list');
+      }
+      return await response.json();
+    } catch (err) {
+      console.error(err);
+      throw err;
+    }
+  }
+
   // Save new quiz created by user in Quiz Studio
   async saveQuiz(quizData, currentUser) {
     try {
