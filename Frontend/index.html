@@ -31,60 +31,86 @@
   <!-- Tailwind CSS Play CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
-    tailwind.config = {
-      darkMode: 'class',
-      theme: {
-        extend: {
-          colors: {
-            darkBg: '#050816',
-            glassBg: 'rgba(10, 14, 28, 0.45)',
-            glassBorder: 'rgba(255, 255, 255, 0.08)',
-            neonCyan: '#00E5FF',
-            neonPurple: '#8B5CF6',
-            neonPink: '#ff007f',
-            neonGreen: '#22C55E',
-            neonYellow: '#F59E0B',
-            neonRed: '#EF4444'
+  tailwind.config = {
+    darkMode: 'class',
+    theme: {
+      extend: {
+        colors: {
+          // ── Backgrounds ──────────────────────────────
+          darkBg:    '#0a0800',
+          deepBg:    '#12100a',
+          surfaceBg: '#1a1503',
+          glassBg:   'rgba(18, 14, 2, 0.65)',
+          glassBorder: 'rgba(212, 175, 55, 0.12)',
+
+          // ── Gold Accents ──────────────────────────────
+          gold:        '#d4af37',   // classic gold   — primary
+          goldDeep:    '#b48c1e',   // antique gold   — secondary
+          goldBright:  '#ffd750',   // bright gold    — highlights
+          goldCopper:  '#d4783c',   // burnt copper   — warm accent
+          goldSage:    '#a0c850',   // olive gold     — success / green
+          goldCream:   '#f5e6c8',   // warm ivory     — text primary
+
+          // ── Light Theme ───────────────────────────────
+          creamBg:   '#fdf8ee',
+          creamDeep: '#fffdf5',
+        },
+
+        fontFamily: {
+          sans:    ['"Inter"', '"Poppins"', 'sans-serif'],
+          display: ['"Space Grotesk"', 'sans-serif'],
+        },
+
+        backdropBlur: {
+          xs: '2px',
+        },
+
+        boxShadow: {
+          'glow-gold':    '0 0 18px rgba(212, 175, 55, 0.45)',
+          'glow-deep':    '0 0 18px rgba(180, 140, 30, 0.40)',
+          'glow-bright':  '0 0 18px rgba(255, 215, 80, 0.42)',
+          'glow-copper':  '0 0 18px rgba(212, 120, 60, 0.40)',
+          'glow-sage':    '0 0 18px rgba(160, 200, 80, 0.38)',
+          'glass':        '0 8px 32px 0 rgba(0, 0, 0, 0.55)',
+          'glass-hover':  '0 20px 50px 0 rgba(212, 175, 55, 0.14)',
+          'inner-glow':   'inset 0 0 20px rgba(212, 175, 55, 0.10)',
+        },
+
+        animation: {
+          'pulse-slow':  'pulse 4s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+          'glow-gold':   'glowGold 2s ease-in-out infinite alternate',
+          'float':       'float 6s ease-in-out infinite',
+          'glow-pulse':  'glowPulse 2.5s ease-in-out infinite',
+          'shimmer':     'shimmer 2s linear infinite',
+          'fade-up':     'fadeUp 0.5s ease-out forwards',
+        },
+
+        keyframes: {
+          glowGold: {
+            '0%':   { boxShadow: '0 0 5px rgba(212, 175, 55, 0.22)' },
+            '100%': { boxShadow: '0 0 24px rgba(212, 175, 55, 0.70)' },
           },
-          fontFamily: {
-            sans: ['"Inter"', '"Poppins"', 'sans-serif'],
-            display: ['"Space Grotesk"', 'sans-serif'],
+          float: {
+            '0%, 100%': { transform: 'translateY(0)' },
+            '50%':      { transform: 'translateY(-10px)' },
           },
-          backdropBlur: {
-            xs: '2px',
+          glowPulse: {
+            '0%, 100%': { opacity: '0.6', transform: 'scale(1)' },
+            '50%':      { opacity: '1',   transform: 'scale(1.02)' },
           },
-          boxShadow: {
-            'neon-cyan': '0 0 15px rgba(0, 229, 255, 0.4)',
-            'neon-purple': '0 0 15px rgba(139, 92, 246, 0.4)',
-            'neon-pink': '0 0 15px rgba(255, 0, 127, 0.4)',
-            'neon-green': '0 0 15px rgba(34, 197, 94, 0.4)',
-            'neon-yellow': '0 0 15px rgba(245, 158, 11, 0.4)',
-            'glass': '0 8px 32px 0 rgba(0, 0, 0, 0.37)',
+          shimmer: {
+            '0%':   { backgroundPosition: '-200% center' },
+            '100%': { backgroundPosition:  '200% center' },
           },
-          animation: {
-            'pulse-slow': 'pulse 4s cubic-bezier(0.4, 0, 0.6, 1) infinite',
-            'glow-cyan': 'glowCyan 2s ease-in-out infinite alternate',
-            'float': 'float 6s ease-in-out infinite',
-            'glow-pulse': 'glowPulse 2s infinite',
+          fadeUp: {
+            '0%':   { opacity: '0', transform: 'translateY(14px)' },
+            '100%': { opacity: '1', transform: 'translateY(0)' },
           },
-          keyframes: {
-            glowCyan: {
-              '0%': { boxShadow: '0 0 5px rgba(0, 229, 255, 0.2)' },
-              '100%': { boxShadow: '0 0 20px rgba(0, 229, 255, 0.6)' },
-            },
-            float: {
-              '0%, 100%': { transform: 'translateY(0)' },
-              '50%': { transform: 'translateY(-10px)' },
-            },
-            glowPulse: {
-              '0%, 100%': { opacity: '0.6', transform: 'scale(1)' },
-              '50%': { opacity: '1', transform: 'scale(1.02)' },
-            }
-          }
-        }
-      }
-    }
-  </script>
+        },
+      },
+    },
+  }
+</script>
 
   <!-- App Custom Overrides -->
   <link rel="stylesheet" href="./css/style.css">
