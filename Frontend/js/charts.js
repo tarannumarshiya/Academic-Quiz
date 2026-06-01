@@ -1,6 +1,8 @@
 let radarChartInstance = null;
 let lineChartInstance = null;
 let doughnutChartInstance = null;
+let lecturerParticipationInstance = null;
+let lecturerScoreDistInstance = null;
 
 // Clean up existing charts before recreating to avoid memory leaks or rendering bugs
 export function destroyCharts() {
@@ -16,9 +18,160 @@ export function destroyCharts() {
     doughnutChartInstance.destroy();
     doughnutChartInstance = null;
   }
+  if (lecturerParticipationInstance) {
+    lecturerParticipationInstance.destroy();
+    lecturerParticipationInstance = null;
+  }
+  if (lecturerScoreDistInstance) {
+    lecturerScoreDistInstance.destroy();
+    lecturerScoreDistInstance = null;
+  }
 }
 
-// Generate all three analytics charts
+// Generate Lecturer Analytics charts
+export function renderLecturerCharts(allAttempts) {
+  // Destroy old instances
+  if (lecturerParticipationInstance) {
+    lecturerParticipationInstance.destroy();
+    lecturerParticipationInstance = null;
+  }
+  if (lecturerScoreDistInstance) {
+    lecturerScoreDistInstance.destroy();
+    lecturerScoreDistInstance = null;
+  }
+
+  if (!allAttempts || allAttempts.length === 0) {
+    renderLecturerEmptyState();
+    return;
+  }
+
+  // 1. Participation Trends: group attempts by Date
+  const dateCounts = {};
+  allAttempts.forEach(att => {
+    const d = new Date(att.timestamp);
+    const dateStr = d.toLocaleDateString([], { month: 'short', day: 'numeric' });
+    dateCounts[dateStr] = (dateCounts[dateStr] || 0) + 1;
+  });
+
+  const participationLabels = Object.keys(dateCounts);
+  const participationData = Object.values(dateCounts);
+
+  // 2. Score Distribution: group by bracket (<50%, 50-70%, 70-90%, >=90%)
+  let brackets = {
+    'Needs Imp. (<50%)': 0,
+    'Average (50-70%)': 0,
+    'Excellent (70-90%)': 0,
+    'Outstanding (>=90%)': 0
+  };
+
+  allAttempts.forEach(att => {
+    const pct = att.percentage || 0;
+    if (pct < 50) brackets['Needs Imp. (<50%)']++;
+    else if (pct < 70) brackets['Average (50-70%)']++;
+    else if (pct < 90) brackets['Excellent (70-90%)']++;
+    else brackets['Outstanding (>=90%)']++;
+  });
+
+  const distLabels = Object.keys(brackets);
+  const distData = Object.values(brackets);
+
+  // Render Line Chart for Participation
+  const ctxPart = document.getElementById('lecturerParticipationChart');
+  if (ctxPart) {
+    const isDark = !document.body.classList.contains('light-theme');
+    const colorGrid = isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(15, 23, 42, 0.05)';
+    const colorText = isDark ? 'rgba(255, 255, 255, 0.6)' : 'rgba(15, 23, 42, 0.6)';
+
+    lecturerParticipationInstance = new window.Chart(ctxPart, {
+      type: 'line',
+      data: {
+        labels: participationLabels,
+        datasets: [{
+          label: 'Total Submissions',
+          data: participationData,
+          borderColor: '#00E5FF',
+          backgroundColor: 'rgba(0, 229, 255, 0.1)',
+          fill: true,
+          tension: 0.3,
+          borderWidth: 2,
+          pointBackgroundColor: '#00E5FF',
+          pointRadius: 4
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false }
+        },
+        scales: {
+          x: {
+            grid: { color: colorGrid },
+            ticks: { color: colorText, font: { family: 'Inter', size: 10 } }
+          },
+          y: {
+            grid: { color: colorGrid },
+            ticks: { color: colorText, font: { family: 'Inter', size: 10 }, stepSize: 1 },
+            min: 0
+          }
+        }
+      }
+    });
+  }
+
+  // Render Bar Chart for score distribution
+  const ctxDist = document.getElementById('lecturerScoreDistChart');
+  if (ctxDist) {
+    const isDark = !document.body.classList.contains('light-theme');
+    const colorGrid = isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(15, 23, 42, 0.05)';
+    const colorText = isDark ? 'rgba(255, 255, 255, 0.6)' : 'rgba(15, 23, 42, 0.6)';
+
+    lecturerScoreDistInstance = new window.Chart(ctxDist, {
+      type: 'bar',
+      data: {
+        labels: distLabels,
+        datasets: [{
+          label: 'Students Count',
+          data: distData,
+          backgroundColor: [
+            'rgba(239, 68, 68, 0.35)', // Red
+            'rgba(245, 158, 11, 0.35)', // Yellow
+            'rgba(139, 92, 246, 0.35)', // Purple
+            'rgba(34, 197, 94, 0.35)'  // Green
+          ],
+          borderColor: [
+            '#EF4444',
+            '#F59E0B',
+            '#8B5CF6',
+            '#22C55E'
+          ],
+          borderWidth: 1.5,
+          borderRadius: 8
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false }
+        },
+        scales: {
+          x: {
+            grid: { color: colorGrid },
+            ticks: { color: colorText, font: { family: 'Inter', size: 10 } }
+          },
+          y: {
+            grid: { color: colorGrid },
+            ticks: { color: colorText, font: { family: 'Inter', size: 10 }, stepSize: 1 },
+            min: 0
+          }
+        }
+      }
+    });
+  }
+}
+
+// Generate all three student analytics charts
 export function renderAnalyticsCharts(attempts) {
   destroyCharts();
 
@@ -27,9 +180,7 @@ export function renderAnalyticsCharts(attempts) {
     return;
   }
 
-  // -------------------------------------------------------------
   // 1. Process data for Accuracy Doughnut Chart
-  // -------------------------------------------------------------
   let totalCorrect = 0;
   let totalIncorrect = 0;
 
@@ -43,9 +194,7 @@ export function renderAnalyticsCharts(attempts) {
   const totalQuestionsAnswered = totalCorrect + totalIncorrect;
   const accuracyPercentage = totalQuestionsAnswered > 0 ? Math.round((totalCorrect / totalQuestionsAnswered) * 100) : 0;
 
-  // -------------------------------------------------------------
   // 2. Process data for Genre Radar Chart
-  // -------------------------------------------------------------
   const genreTotals = {};
   const genreCounts = {};
   
@@ -79,9 +228,7 @@ export function renderAnalyticsCharts(attempts) {
     radarData.push(avg);
   });
 
-  // -------------------------------------------------------------
   // 3. Process data for Performance Line Chart (Last 8 attempts)
-  // -------------------------------------------------------------
   const recentAttempts = attempts.slice(-8);
   const lineLabels = recentAttempts.map(attempt => {
     const title = attempt.quizTitle || 'Quiz';
@@ -89,9 +236,11 @@ export function renderAnalyticsCharts(attempts) {
   });
   const lineData = recentAttempts.map(attempt => attempt.percentage);
 
-  // =============================================================
+  const isDark = !document.body.classList.contains('light-theme');
+  const colorGrid = isDark ? 'rgba(255, 255, 255, 0.04)' : 'rgba(15, 23, 42, 0.04)';
+  const colorText = isDark ? 'rgba(255, 255, 255, 0.5)' : 'rgba(15, 23, 42, 0.5)';
+
   // RENDER DOUGHNUT CHART (Accuracy Ratio)
-  // =============================================================
   const ctxDoughnut = document.getElementById('accuracyDoughnutChart');
   if (ctxDoughnut) {
     doughnutChartInstance = new window.Chart(ctxDoughnut, {
@@ -101,11 +250,11 @@ export function renderAnalyticsCharts(attempts) {
         datasets: [{
           data: [totalCorrect, totalIncorrect],
           backgroundColor: [
-            'rgba(57, 255, 20, 0.25)', // Neon Green
+            'rgba(34, 197, 94, 0.25)', // Neon Green
             'rgba(255, 0, 127, 0.25)'  // Neon Pink
           ],
           borderColor: [
-            '#39ff14', 
+            '#22C55E', 
             '#ff007f'
           ],
           borderWidth: 2,
@@ -120,9 +269,9 @@ export function renderAnalyticsCharts(attempts) {
           legend: {
             position: 'bottom',
             labels: {
-              color: 'rgba(255, 255, 255, 0.7)',
+              color: colorText,
               font: {
-                family: 'Plus Jakarta Sans',
+                family: 'Inter',
                 size: 11,
                 weight: '500'
               },
@@ -148,22 +297,19 @@ export function renderAnalyticsCharts(attempts) {
           const ctx = chart.ctx;
           
           ctx.restore();
-          // Draw percentage number
           ctx.font = '800 24px Space Grotesk';
-          ctx.fillStyle = '#39ff14';
+          ctx.fillStyle = '#22C55E';
           ctx.textAlign = 'center';
           ctx.textBaseline = 'middle';
           
           const text = `${accuracyPercentage}%`;
           const textX = width / 2;
-          // Shift text slightly upward to accommodate legend on bottom
           const textY = (height - 30) / 2;
           
           ctx.fillText(text, textX, textY);
           
-          // Draw label
-          ctx.font = '600 10px Plus Jakarta Sans';
-          ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
+          ctx.font = '600 10px Inter';
+          ctx.fillStyle = colorText;
           ctx.fillText('ACCURACY', textX, textY + 20);
           ctx.save();
         }
@@ -171,9 +317,7 @@ export function renderAnalyticsCharts(attempts) {
     });
   }
 
-  // =============================================================
   // RENDER RADAR CHART (Genre Profiles)
-  // =============================================================
   const ctxRadar = document.getElementById('genreRadarChart');
   if (ctxRadar) {
     radarChartInstance = new window.Chart(ctxRadar, {
@@ -183,13 +327,13 @@ export function renderAnalyticsCharts(attempts) {
         datasets: [{
           label: 'Mastery Score (%)',
           data: radarData,
-          backgroundColor: 'rgba(0, 242, 254, 0.15)',
-          borderColor: '#00f2fe',
+          backgroundColor: 'rgba(0, 229, 255, 0.15)',
+          borderColor: '#00E5FF',
           borderWidth: 2,
-          pointBackgroundColor: '#00f2fe',
-          pointBorderColor: '#06080d',
+          pointBackgroundColor: '#00E5FF',
+          pointBorderColor: isDark ? '#050816' : '#fff',
           pointHoverBackgroundColor: '#fff',
-          pointHoverBorderColor: '#00f2fe',
+          pointHoverBorderColor: '#00E5FF',
           pointRadius: 4
         }]
       },
@@ -197,9 +341,7 @@ export function renderAnalyticsCharts(attempts) {
         responsive: true,
         maintainAspectRatio: false,
         plugins: {
-          legend: {
-            display: false
-          },
+          legend: { display: false },
           tooltip: {
             callbacks: {
               label: function(context) {
@@ -210,23 +352,13 @@ export function renderAnalyticsCharts(attempts) {
         },
         scales: {
           r: {
-            angleLines: {
-              color: 'rgba(255, 255, 255, 0.08)'
-            },
-            grid: {
-              color: 'rgba(255, 255, 255, 0.08)'
-            },
+            angleLines: { color: colorGrid },
+            grid: { color: colorGrid },
             pointLabels: {
-              color: 'rgba(255, 255, 255, 0.7)',
-              font: {
-                size: 11,
-                family: 'Plus Jakarta Sans'
-              }
+              color: colorText,
+              font: { size: 10, family: 'Inter' }
             },
-            ticks: {
-              display: false,
-              stepSize: 20
-            },
+            ticks: { display: false, stepSize: 20 },
             suggestedMin: 0,
             suggestedMax: 100
           }
@@ -235,9 +367,7 @@ export function renderAnalyticsCharts(attempts) {
     });
   }
 
-  // =============================================================
   // RENDER LINE CHART (Score Progression History)
-  // =============================================================
   const ctxLine = document.getElementById('historyLineChart');
   if (ctxLine) {
     const gradient = ctxLine.getContext('2d').createLinearGradient(0, 0, 0, 300);
@@ -257,7 +387,7 @@ export function renderAnalyticsCharts(attempts) {
           borderWidth: 3,
           tension: 0.4,
           pointBackgroundColor: '#ff007f',
-          pointBorderColor: '#06080d',
+          pointBorderColor: isDark ? '#050816' : '#fff',
           pointHoverBackgroundColor: '#fff',
           pointHoverBorderColor: '#ff007f',
           pointRadius: 5,
@@ -268,9 +398,7 @@ export function renderAnalyticsCharts(attempts) {
         responsive: true,
         maintainAspectRatio: false,
         plugins: {
-          legend: {
-            display: false
-          },
+          legend: { display: false },
           tooltip: {
             callbacks: {
               label: function(context) {
@@ -281,28 +409,12 @@ export function renderAnalyticsCharts(attempts) {
         },
         scales: {
           x: {
-            grid: {
-              color: 'rgba(255, 255, 255, 0.04)'
-            },
-            ticks: {
-              color: 'rgba(255, 255, 255, 0.5)',
-              font: {
-                family: 'Plus Jakarta Sans',
-                size: 10
-              }
-            }
+            grid: { color: colorGrid },
+            ticks: { color: colorText, font: { family: 'Inter', size: 10 } }
           },
           y: {
-            grid: {
-              color: 'rgba(255, 255, 255, 0.04)'
-            },
-            ticks: {
-              color: 'rgba(255, 255, 255, 0.5)',
-              font: {
-                family: 'Plus Jakarta Sans'
-              },
-              stepSize: 20
-            },
+            grid: { color: colorGrid },
+            ticks: { color: colorText, font: { family: 'Inter' }, stepSize: 20 },
             min: 0,
             max: 100
           }
@@ -320,11 +432,27 @@ function renderEmptyState() {
     if (el) {
       const ctx = el.getContext('2d');
       ctx.clearRect(0, 0, el.width, el.height);
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
-      ctx.font = '13px Plus Jakarta Sans';
+      ctx.fillStyle = document.body.classList.contains('light-theme') ? '#64748b' : 'rgba(255, 255, 255, 0.4)';
+      ctx.font = '13px Inter';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.fillText('Take your first quiz to generate statistics!', el.width / 2, el.height / 2);
+    }
+  });
+}
+
+function renderLecturerEmptyState() {
+  const containers = ['lecturerParticipationChart', 'lecturerScoreDistChart'];
+  containers.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) {
+      const ctx = el.getContext('2d');
+      ctx.clearRect(0, 0, el.width, el.height);
+      ctx.fillStyle = document.body.classList.contains('light-theme') ? '#64748b' : 'rgba(255, 255, 255, 0.4)';
+      ctx.font = '13px Inter';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('No student submissions recorded yet.', el.width / 2, el.height / 2);
     }
   });
 }
